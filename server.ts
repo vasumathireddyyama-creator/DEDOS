@@ -20,7 +20,7 @@ function getStripe(): Stripe {
   return stripeClient;
 }
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 // Body parsing middleware
@@ -546,4 +546,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

@@ -1,0 +1,6 @@
+{
+  "name": "Real-Time E-commerce with Stripe",
+  "description": "An elegant e-commerce application featuring real-time inventory management, order tracking, and clean Stripe checkout integration with offline-simulated sandbox fallback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

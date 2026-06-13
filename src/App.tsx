@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Product, Order, RealTimeEvent } from "./types";
 import Navbar from "./components/Navbar";
 import ProductCard from "./components/ProductCard";
@@ -36,6 +36,7 @@ export default function App() {
   // Traffic Logs System
   const [trafficLogs, setTrafficLogs] = useState<TrafficLog[]>([]);
   const [isSseConnected, setIsSseConnected] = useState(false);
+  const wasSseConnectedRef = useRef(false);
 
   const addTrafficLog = (entry: Omit<TrafficLog, "id" | "timestamp">) => {
     const d = new Date();
@@ -120,29 +121,35 @@ export default function App() {
     eventSource.onopen = () => {
       console.log("[SSE] Connected to real-time e-commerce update stream");
       setIsSseConnected(true);
-      addTrafficLog({
-        type: "INBOUND",
-        source: "SSE-BROADCAST",
-        method: "SSE_INIT",
-        endpoint: "/api/events",
-        status: "Active",
-        message: "Established stateful real-time SSE stream loop over high-velocity HTTP pathway",
-        payload: '": connected"',
-      });
+      if (!wasSseConnectedRef.current) {
+        wasSseConnectedRef.current = true;
+        addTrafficLog({
+          type: "INBOUND",
+          source: "SSE-BROADCAST",
+          method: "SSE_INIT",
+          endpoint: "/api/events",
+          status: "Active",
+          message: "Established stateful real-time SSE stream loop over high-velocity HTTP pathway",
+          payload: '": connected"',
+        });
+      }
     };
 
     eventSource.onerror = (err) => {
       console.error("[SSE] Connection error. Reconnecting...", err);
       setIsSseConnected(false);
-      addTrafficLog({
-        type: "SYSTEM",
-        source: "SSE-BROADCAST",
-        method: "SSE_ERROR",
-        endpoint: "/api/events",
-        status: "Dropped",
-        message: "SSE connection disrupted. Server is restarting or client went idle. Retrying link...",
-        payload: '""',
-      });
+      if (wasSseConnectedRef.current) {
+        wasSseConnectedRef.current = false;
+        addTrafficLog({
+          type: "SYSTEM",
+          source: "SSE-BROADCAST",
+          method: "SSE_ERROR",
+          endpoint: "/api/events",
+          status: "Dropped",
+          message: "SSE connection disrupted. Server is restarting or client went idle. Retrying link...",
+          payload: '""',
+        });
+      }
     };
 
     // Listen for custom real-time events broadcasted from the Express server!
@@ -206,6 +213,18 @@ export default function App() {
       eventSource.close();
     };
   }, []);
+
+  // Fallback Polling for Vercel/Stateless Serverless Environments (runs when SSE is offline/disconnected)
+  useEffect(() => {
+    if (isSseConnected) return;
+
+    // Start quick periodic check to sync orders and inventory
+    const interval = setInterval(() => {
+      refreshProductsAndOrders();
+    }, 7000);
+
+    return () => clearInterval(interval);
+  }, [isSseConnected]);
 
   const handleGenerateMockTraffic = () => {
     const mockEvents = [

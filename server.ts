@@ -27,7 +27,9 @@ const PORT = 3000;
 app.use(express.json());
 
 // Path to persist data in memory + file backup
-const DATA_FILE = path.join(process.cwd(), "data.json");
+const DATA_FILE = process.env.VERCEL
+  ? path.join("/tmp", "data.json")
+  : path.join(process.cwd(), "data.json");
 
 // Initial mock products
 const DEFAULT_PRODUCTS: Product[] = [

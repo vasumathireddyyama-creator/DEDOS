@@ -67,9 +67,14 @@ export default function App() {
         addTrafficLog(detail);
       }
     };
+    const handleRefreshEvent = () => {
+      refreshProductsAndOrders();
+    };
     window.addEventListener("stk-traffic-log", handleLogEvent);
+    window.addEventListener("stk-refresh-data", handleRefreshEvent);
     return () => {
       window.removeEventListener("stk-traffic-log", handleLogEvent);
+      window.removeEventListener("stk-refresh-data", handleRefreshEvent);
     };
   }, []);
 
@@ -537,6 +542,7 @@ export default function App() {
         }}
         onGenerateMockTraffic={handleGenerateMockTraffic}
         isConnected={isSseConnected}
+        products={products}
       />
 
       {/* Real-time Notifications Floating Stack */}

@@ -17,9 +17,14 @@ import {
   Flame, 
   Search, 
   ArrowUpRight, 
-  ArrowDownLeft 
+  ArrowDownLeft,
+  RefreshCw,
+  ShoppingBag,
+  SlidersHorizontal
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { safeFetch } from "../utils/safeFetch";
+import { Product } from "../types";
 
 export interface TrafficLog {
   id: string;
@@ -39,13 +44,15 @@ interface TrafficMonitorProps {
   onClearLogs: () => void;
   onGenerateMockTraffic: () => void;
   isConnected: boolean;
+  products: Product[];
 }
 
 export default function TrafficMonitor({
   logs,
   onClearLogs,
   onGenerateMockTraffic,
-  isConnected
+  isConnected,
+  products
 }: TrafficMonitorProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -54,6 +61,39 @@ export default function TrafficMonitor({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [viewingPayloadId, setViewingPayloadId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"FEED" | "CONTROLLER">("FEED");
+
+  // Controller states
+  const [targetEmail, setTargetEmail] = useState("operator@control.io");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  // Initialize selected product when products load
+  useEffect(() => {
+    if (products.length > 0 && !selectedProductId) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [products, selectedProductId]);
+
+  const triggerApi = async (method: string, endpoint: string, body?: any) => {
+    setIsSending(true);
+    try {
+      const options: RequestInit = { method };
+      if (body) {
+        options.headers = { "Content-Type": "application/json" };
+        options.body = JSON.stringify(body);
+      }
+      const res = await safeFetch(endpoint, options);
+      if (res.ok) {
+        // Broadcast custom event to refresh standard application state everywhere!
+        window.dispatchEvent(new CustomEvent("stk-refresh-data"));
+      }
+    } catch (err) {
+      console.error("[Controller Error]", err);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -248,190 +288,352 @@ export default function TrafficMonitor({
               </div>
             </div>
 
-            {/* Sub-Filters and controls */}
-            <div className="p-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/10 shrink-0">
-              <div className="flex gap-1">
-                {(["ALL", "SSE", "HTTP", "SYSTEM"] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setSelectedFilter(filter)}
-                    className={`px-2 py-1 rounded text-[9px] font-bold ${
-                      selectedFilter === filter
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-805"
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-
-              {/* Utility actions */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={onGenerateMockTraffic}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-orange-400 text-[9px] font-bold transition-all"
-                  title="Inject simulated load test traffic spike"
-                >
-                  <Flame className="h-3 w-3 text-orange-500" />
-                  <span>LOAD_TEST</span>
-                </button>
-                <button
-                  onClick={onClearLogs}
-                  className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 border border-transparent hover:border-slate-850"
-                  title="Clear Console Buffer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={handleExportAll}
-                  className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-850"
-                  title="Export to Json"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            {/* Tab Bar selector */}
+            <div className="flex border-b border-slate-800 bg-slate-900/50 shrink-0 select-none">
+              <button
+                onClick={() => setActiveTab("FEED")}
+                className={`flex-1 py-2 text-center text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 border-b-2 ${
+                  activeTab === "FEED"
+                    ? "text-indigo-400 border-indigo-500 bg-slate-950/40"
+                    : "text-slate-500 border-transparent hover:text-slate-300"
+                }`}
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                Live Log Feed
+              </button>
+              <button
+                onClick={() => setActiveTab("CONTROLLER")}
+                className={`flex-1 py-2 text-center text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 border-b-2 ${
+                  activeTab === "CONTROLLER"
+                    ? "text-indigo-400 border-indigo-500 bg-slate-950/40"
+                    : "text-slate-500 border-transparent hover:text-slate-300"
+                }`}
+              >
+                <Cpu className="h-3.5 w-3.5 animate-pulse" />
+                Real Traffic Controller
+              </button>
             </div>
 
-            {/* Search Input bar */}
-            <div className="relative px-2 py-1.5 border-b border-slate-880 bg-slate-950 shrink-0">
-              <Search className="absolute left-4 top-2.5 h-3 w-3 text-slate-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="search within logging terminal payloads..."
-                className="w-full bg-slate-900 hover:bg-slate-850 focus:bg-slate-900 py-1.5 pl-6.5 pr-3 rounded-lg border border-slate-800 text-[10px] outline-none text-indigo-200 placeholder-slate-600 transition-all border-dashed"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-4 top-2 text-[8px] uppercase font-bold text-slate-500 hover:text-white"
-                >
-                  clear
-                </button>
-              )}
-            </div>
+            {activeTab === "FEED" ? (
+              <>
+                {/* Sub-Filters and controls */}
+                <div className="p-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/10 shrink-0">
+                  <div className="flex gap-1">
+                    {(["ALL", "SSE", "HTTP", "SYSTEM"] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setSelectedFilter(filter)}
+                        className={`px-2 py-1 rounded text-[9px] font-bold ${
+                          selectedFilter === filter
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-805"
+                        }`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
 
-            {/* Scrolling terminal view */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 select-text custom-terminal">
-              {filteredLogs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-600 text-center py-12">
-                  <span className="text-[18px]">📟</span>
-                  <p className="mt-1">No logs captured fitting your selection.</p>
-                  <p className="text-[9px] max-w-[240px] mt-0.5 leading-relaxed text-slate-700 font-mono">
-                    Add products to your cart, increment stocks in the console, or place sandboxed orders to trigger network events!
-                  </p>
-                </div>
-              ) : (
-                filteredLogs.map((log) => {
-                  const isSSE = log.source === "SSE-BROADCAST";
-                  const isStripe = log.source === "STRIPE-API";
-                  const isSystem = log.type === "SYSTEM";
-
-                  const tagColor = isSSE
-                    ? "bg-emerald-900/40 text-emerald-400 border-emerald-950"
-                    : isStripe
-                    ? "bg-violet-900/40 text-violet-400 border-violet-950"
-                    : isSystem
-                    ? "bg-slate-900/60 text-slate-400 border-slate-800"
-                    : "bg-indigo-900/40 text-indigo-400 border-indigo-950";
-
-                  const statusColor = 
-                    String(log.status).startsWith("2") || log.status === "Active" || log.status === "Received" || log.status === "Success"
-                      ? "text-emerald-400 font-bold" 
-                      : String(log.status).startsWith("1") || log.status === "Heartbeat" || log.status === "Ping"
-                      ? "text-slate-400"
-                      : "text-rose-500 font-bold";
-
-                  const isViewingPayload = viewingPayloadId === log.id;
-
-                  return (
-                    <div 
-                      key={log.id} 
-                      className={`p-2 rounded-lg border bg-slate-900/30 hover:bg-slate-900/60 transition-colors ${
-                        isSSE ? "border-emerald-500/10" : isSystem ? "border-slate-800" : "border-indigo-500/10"
-                      }`}
+                  {/* Utility actions */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={onGenerateMockTraffic}
+                      className="flex items-center gap-1 px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-orange-400 text-[9px] font-bold transition-all"
+                      title="Inject simulated load test traffic spike"
                     >
-                      {/* Meta Line */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-slate-500 font-mono text-[9px]">[{log.timestamp}]</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase font-mono ${tagColor}`}>
-                            {log.source === "HTTP-CLIENT" ? "HTTP" : log.source}
-                          </span>
-                          <span className="font-bold text-slate-300">
-                            {log.method} <span className="text-slate-400 font-medium font-mono text-[10px]">{log.endpoint}</span>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 bg-slate-950/60 pl-1.5 py-0.5 rounded font-bold">
-                          <span className={`text-[9px] uppercase font-mono ${statusColor}`}>
-                            {log.status}
-                          </span>
-                          {log.latency !== undefined && (
-                            <span className="text-slate-500 text-[8px] pl-1 font-normal border-l border-slate-800">
-                              {log.latency}ms
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <Flame className="h-3 w-3 text-orange-500" />
+                      <span>LOAD_TEST</span>
+                    </button>
+                    <button
+                      onClick={onClearLogs}
+                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 border border-transparent hover:border-slate-850"
+                      title="Clear Console Buffer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={handleExportAll}
+                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-850"
+                      title="Export to Json"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
 
-                      {/* Log Message Description */}
-                      <div className="mt-1 text-slate-300 leading-normal pl-1.5 border-l border-slate-850 font-sans text-[10px]">
-                        {log.message}
-                      </div>
+                {/* Search Input bar */}
+                <div className="relative px-2 py-1.5 border-b border-slate-880 bg-slate-950 shrink-0">
+                  <Search className="absolute left-4 top-2.5 h-3 w-3 text-slate-500" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="search within logging terminal payloads..."
+                    className="w-full bg-slate-900 hover:bg-slate-850 focus:bg-slate-900 py-1.5 pl-6.5 pr-3 rounded-lg border border-slate-800 text-[10px] outline-none text-indigo-200 placeholder-slate-600 transition-all border-dashed"
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-4 top-2 text-[8px] uppercase font-bold text-slate-500 hover:text-white"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
 
-                      {/* Payload Inspector Button */}
-                      {log.payload && log.payload !== "{}" && log.payload !== '""' && (
-                        <div className="mt-1.5">
-                          <button
-                            onClick={() => setViewingPayloadId(isViewingPayload ? null : log.id)}
-                            className="text-[9px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer font-bold select-none pr-3"
-                          >
-                            {isViewingPayload ? "[-] Collapse Payload" : "[+] Inspect Payload / JSON"}
-                          </button>
+                {/* Scrolling terminal view */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 select-text custom-terminal">
+                  {filteredLogs.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-600 text-center py-12">
+                      <span className="text-[18px]">📟</span>
+                      <p className="mt-1">No logs captured fitting your selection.</p>
+                      <p className="text-[9px] max-w-[240px] mt-0.5 leading-relaxed text-slate-700 font-mono">
+                        Add products to your cart, increment stocks in the console, or place sandboxed orders to trigger network events!
+                      </p>
+                    </div>
+                  ) : (
+                    filteredLogs.map((log) => {
+                      const isSSE = log.source === "SSE-BROADCAST";
+                      const isStripe = log.source === "STRIPE-API";
+                      const isSystem = log.type === "SYSTEM";
 
-                          {isViewingPayload && (
-                            <div className="relative mt-1 border border-slate-800 bg-slate-950 rounded-lg p-2 overflow-x-auto text-[10px] leading-relaxed select-text font-mono max-h-40 text-left">
-                              <pre className="text-indigo-200/95 font-mono">
-                                {log.payload}
-                              </pre>
-                              <div className="absolute right-2 top-2 flex gap-1 bg-slate-950/90 pl-1 py-1 rounded">
-                                <button
-                                  onClick={() => handleCopyLog(log.payload, log.id)}
-                                  className="text-[8px] text-slate-400 hover:text-white uppercase font-black"
-                                  title="Copy raw JSON payload"
-                                >
-                                  {copiedId === log.id ? "COPIED!" : "COPY"}
-                                </button>
-                              </div>
+                      const tagColor = isSSE
+                        ? "bg-emerald-900/40 text-emerald-400 border-emerald-950"
+                        : isStripe
+                        ? "bg-violet-900/40 text-violet-400 border-violet-950"
+                        : isSystem
+                        ? "bg-slate-900/60 text-slate-400 border-slate-800"
+                        : "bg-indigo-900/40 text-indigo-400 border-indigo-950";
+
+                      const statusColor = 
+                        String(log.status).startsWith("2") || log.status === "Active" || log.status === "Received" || log.status === "Success"
+                          ? "text-emerald-400 font-bold" 
+                          : String(log.status).startsWith("1") || log.status === "Heartbeat" || log.status === "Ping"
+                          ? "text-slate-400"
+                          : "text-rose-500 font-bold";
+
+                      const isViewingPayload = viewingPayloadId === log.id;
+
+                      return (
+                        <div 
+                          key={log.id} 
+                          className={`p-2 rounded-lg border bg-slate-900/30 hover:bg-slate-900/60 transition-colors ${
+                            isSSE ? "border-emerald-500/10" : isSystem ? "border-slate-800" : "border-indigo-500/10"
+                          }`}
+                        >
+                          {/* Meta Line */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-slate-500 font-mono text-[9px]">[{log.timestamp}]</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase font-mono ${tagColor}`}>
+                                {log.source === "HTTP-CLIENT" ? "HTTP" : log.source}
+                              </span>
+                              <span className="font-bold text-slate-300">
+                                {log.method} <span className="text-slate-400 font-medium font-mono text-[10px]">{log.endpoint}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 bg-slate-950/60 pl-1.5 py-0.5 rounded font-bold">
+                              <span className={`text-[9px] uppercase font-mono ${statusColor}`}>
+                                {log.status}
+                              </span>
+                              {log.latency !== undefined && (
+                                <span className="text-slate-500 text-[8px] pl-1 font-normal border-l border-slate-800">
+                                  {log.latency}ms
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Log Message Description */}
+                          <div className="mt-1 text-slate-300 leading-normal pl-1.5 border-l border-slate-850 font-sans text-[10px]">
+                            {log.message}
+                          </div>
+
+                          {/* Payload Inspector Button */}
+                          {log.payload && log.payload !== "{}" && log.payload !== '""' && (
+                            <div className="mt-1.5">
+                              <button
+                                onClick={() => setViewingPayloadId(isViewingPayload ? null : log.id)}
+                                className="text-[9px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer font-bold select-none pr-3"
+                              >
+                                {isViewingPayload ? "[-] Collapse Payload" : "[+] Inspect Payload / JSON"}
+                              </button>
+
+                              {isViewingPayload && (
+                                <div className="relative mt-1 border border-slate-800 bg-slate-950 rounded-lg p-2 overflow-x-auto text-[10px] leading-relaxed select-text font-mono max-h-40 text-left">
+                                  <pre className="text-indigo-200/95 font-mono">
+                                    {log.payload}
+                                  </pre>
+                                  <div className="absolute right-2 top-2 flex gap-1 bg-slate-950/90 pl-1 py-1 rounded">
+                                    <button
+                                      onClick={() => handleCopyLog(log.payload, log.id)}
+                                      className="text-[8px] text-slate-400 hover:text-white uppercase font-black"
+                                      title="Copy raw JSON payload"
+                                    >
+                                      {copiedId === log.id ? "COPIED!" : "COPY"}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      );
+                    })
+                  )}
+                  <div ref={logsEndRef} />
+                </div>
+
+                {/* Bottom Sticky AutoScroll control */}
+                <div className="px-3 py-1.5 border-t border-slate-900 bg-slate-900/40 text-slate-550 flex items-center justify-between text-[9px] shrink-0">
+                  <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-300 select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoScroll}
+                      onChange={(e) => setAutoScroll(e.target.checked)}
+                      className="rounded border-slate-800 bg-slate-900 text-indigo-600 focus:ring-0 cursor-pointer h-3 w-3"
+                    />
+                    <span>Follow Tail Scroll (Auto Scroll)</span>
+                  </label>
+
+                  <span className="text-slate-500">
+                    Log Buffer: {logs.length} entries (capped at 100)
+                  </span>
+                </div>
+              </>
+            ) : (
+              /* Real Traffic Controller Tab */
+              <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-3 space-y-3 select-none text-[11px] custom-terminal">
+                {/* 1. Core Data Pipelines Section */}
+                <div className="border border-slate-800 rounded-lg p-2.5 bg-slate-900/30">
+                  <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <Database className="h-3.5 w-3.5 text-indigo-400" />
+                    1. Core Data Pipelines (GET/POST)
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      disabled={isSending}
+                      onClick={() => triggerApi("GET", "/api/products")}
+                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 hover:text-indigo-300 border border-slate-800 rounded text-left transition-colors cursor-pointer text-[10px] flex items-center justify-between font-mono"
+                    >
+                      <span>GET /products</span>
+                      <ArrowDownLeft className="h-3 w-3 text-emerald-400" />
+                    </button>
+                    <button
+                      disabled={isSending}
+                      onClick={() => triggerApi("GET", "/api/orders")}
+                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 hover:text-indigo-300 border border-slate-800 rounded text-left transition-colors cursor-pointer text-[10px] flex items-center justify-between font-mono"
+                    >
+                      <span>GET /orders</span>
+                      <ArrowDownLeft className="h-3 w-3 text-emerald-400" />
+                    </button>
+                  </div>
+                  <button
+                    disabled={isSending}
+                    onClick={() => {
+                      if (confirm("Restore default products and wipe all orders?")) {
+                        triggerApi("POST", "/api/admin/reset");
+                      }
+                    }}
+                    className="w-full mt-2 px-2.5 py-1.5 bg-rose-950/30 hover:bg-rose-900/30 border border-rose-900/50 hover:border-rose-800 text-rose-300 hover:text-rose-200 rounded text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isSending ? "animate-spin" : ""}`} />
+                    Wipe & Reset Server Database (POST)
+                  </button>
+                </div>
+
+                {/* 2. Direct Stock Injection Section */}
+                <div className="border border-slate-800 rounded-lg p-2.5 bg-slate-900/30">
+                  <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-400" />
+                    2. High-Priority Stock Injection (PATCH)
+                  </div>
+                  <div className="space-y-1.5">
+                    {products.slice(0, 3).map((prod) => (
+                      <div key={prod.id} className="flex items-center justify-between bg-slate-950 p-2 rounded border border-slate-900">
+                        <div className="truncate max-w-[170px]">
+                          <span className="font-bold text-slate-300 text-[11px] block truncate">{prod.name}</span>
+                          <span className="block text-[8px] text-slate-500 uppercase font-mono tracking-wider font-bold">
+                            ID: {prod.id} • STOCK: <span className="text-amber-400 font-black">{prod.stock}</span>
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            disabled={isSending || prod.stock <= 0}
+                            onClick={() => triggerApi("PATCH", "/api/admin/inventory", {
+                              productId: prod.id,
+                              currentStock: Math.max(0, prod.stock - 1)
+                            })}
+                            className="px-2 py-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-rose-900/40 text-rose-400 hover:text-rose-300 rounded text-[9px] font-black cursor-pointer disabled:opacity-30 transition-all font-mono"
+                            title="Deduct 1 from stock"
+                          >
+                            -1
+                          </button>
+                          <button
+                            disabled={isSending}
+                            onClick={() => triggerApi("PATCH", "/api/admin/inventory", {
+                              productId: prod.id,
+                              currentStock: prod.stock + 5
+                            })}
+                            className="px-2 py-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-900/40 text-emerald-400 hover:text-emerald-300 rounded text-[9px] font-black cursor-pointer transition-all font-mono"
+                            title="Add 5 to stock"
+                          >
+                            +5
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Simulated Transaction Dispatcher Section */}
+                <div className="border border-slate-800 rounded-lg p-2.5 bg-slate-900/30">
+                  <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <ShoppingBag className="h-3.5 w-3.5 text-indigo-400" />
+                    3. Simulated Purchase Request (POST)
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 mb-2">
+                    <div>
+                      <label className="block text-[8px] text-slate-500 uppercase font-bold mb-1 font-mono">Target Item</label>
+                      <select
+                        value={selectedProductId}
+                        onChange={(e) => setSelectedProductId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded px-1.5 py-1 text-[9px] text-slate-300 outline-none cursor-pointer font-sans"
+                      >
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  );
-                })
-              )}
-              <div ref={logsEndRef} />
-            </div>
-
-            {/* Bottom Sticky AutoScroll control */}
-            <div className="px-3 py-1.5 border-t border-slate-900 bg-slate-900/40 text-slate-550 flex items-center justify-between text-[9px] shrink-0">
-              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-300 select-none">
-                <input
-                  type="checkbox"
-                  checked={autoScroll}
-                  onChange={(e) => setAutoScroll(e.target.checked)}
-                  className="rounded border-slate-800 bg-slate-900 text-indigo-600 focus:ring-0 cursor-pointer h-3 w-3"
-                />
-                <span>Follow Tail Scroll (Auto Scroll)</span>
-              </label>
-
-              <span className="text-slate-500">
-                Log Buffer: {logs.length} entries (capped at 100)
-              </span>
-            </div>
+                    <div>
+                      <label className="block text-[8px] text-slate-500 uppercase font-bold mb-1 font-mono">Client Email</label>
+                      <input
+                        type="text"
+                        value={targetEmail}
+                        onChange={(e) => setTargetEmail(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded px-1.5 py-1 text-[9px] text-slate-300 outline-none font-mono"
+                        placeholder="operator@control.io"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    disabled={isSending}
+                    onClick={() => {
+                      triggerApi("POST", "/api/checkout/simulated", {
+                        items: [{ productId: selectedProductId || (products[0]?.id), quantity: 1 }],
+                        customerEmail: targetEmail || "operator@control.io"
+                      });
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-indigo-950/40 hover:bg-indigo-900/40 border border-indigo-900/50 hover:border-indigo-800 text-indigo-300 hover:text-indigo-200 transition-colors cursor-pointer text-[10px] font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Send className={`h-3 w-3 ${isSending ? "animate-pulse" : ""}`} />
+                    Dispatch Purchase Outbound (1 Unit)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </AnimatePresence>

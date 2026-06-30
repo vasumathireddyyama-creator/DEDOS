@@ -3,17 +3,14 @@ import { Product } from "../types";
 import { Plus, Minus, RotateCcw, AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import { safeFetch } from "../utils/safeFetch";
-
 interface AdminPanelProps {
   products: Product[];
   onRefreshProducts: () => void;
 }
-
 export default function AdminPanel({ products, onRefreshProducts }: AdminPanelProps) {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
-
   // Format price helper
   const formatPrice = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -21,7 +18,6 @@ export default function AdminPanel({ products, onRefreshProducts }: AdminPanelPr
       currency: "USD",
     }).format(cents / 100);
   };
-
   const handleStockChange = async (productId: string, currentStock: number) => {
     setUpdatingId(productId);
     try {
@@ -30,11 +26,9 @@ export default function AdminPanel({ products, onRefreshProducts }: AdminPanelPr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId, currentStock }),
       });
-
       if (!response.ok) {
         throw new Error("Failed to patch stock level");
       }
-
       setSuccessId(productId);
       setTimeout(() => setSuccessId(null), 1500);
       onRefreshProducts();
@@ -44,7 +38,6 @@ export default function AdminPanel({ products, onRefreshProducts }: AdminPanelPr
       setUpdatingId(null);
     }
   };
-
   const handleResetDefaults = async () => {
     if (!window.confirm("Are you sure you want to restore default items and wipe out order logs? This will reset all stock levels.")) return;
     
